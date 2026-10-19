@@ -2,6 +2,7 @@
 // Ver.1.6: keep the existing storage key and all Ver.1.5 data.
 const pg16Style=document.createElement('style');
 pg16Style.textContent=`.tabs{gap:3px;padding:9px 6px 0;overflow:visible}.tabs button{flex:1 1 0;min-width:0;padding:11px 1px;font-size:clamp(10px,2.9vw,13px);white-space:nowrap;min-height:42px}.pg16choices{display:grid;gap:9px}.pg16choice{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #dce9df;border-radius:10px}.pg16choice input{width:auto}.pg16copy{width:100%;min-height:150px;resize:vertical;font:12px/1.5 monospace;word-break:break-all;padding:10px;border:1px solid #c7d9cd;border-radius:10px}.pg16sub{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}.pg16sub button{flex:1;min-width:95px;font-size:12px;padding:8px 4px}.pg16warn{background:#fff5e7;border-left:4px solid #d29a39;padding:10px;border-radius:5px;font-size:13px}`;
+pg16Style.textContent+=' .pg16sendbox{border:1px solid #dce9df;border-radius:12px;padding:14px;margin-top:16px}.pg16sendbox h3{margin-top:0}.pg16sendbox p{margin-bottom:12px}';
 document.head.appendChild(pg16Style);
 const pg16Nav=document.getElementById('tabs');
 pg16Nav.innerHTML=[['home','プレー'],['courses','コース'],['history','記録'],['players','プレイヤー'],['data','データ管理']].map(([id,label])=>`<button data-tab="${id}">${label}</button>`).join('');
@@ -26,8 +27,43 @@ function pg16TogglePart(yes){pg16Partial=yes;render()}
 function pg16Toggle(id,yes){if(yes)pg16Selection.add(id);else pg16Selection.delete(id);render()}
 function pg16Selected(){return state.sessions.filter(s=>pg16Selection.has(s.id)&&pg16LocalDay(s.date)===pg16Day)}
 function pg16Bundle(sessions){return {format:'parkgolf-session-bundle',version:1,exported:new Date().toISOString(),sessions:sessions.map(s=>pgPayload(s).session)}}
-function pg16Send(){const days=pg16Days();if(!days.includes(pg16Day)){pg16Day=days[0]||'';pg16Selection=new Set(state.sessions.filter(s=>pg16LocalDay(s.date)===pg16Day).map(s=>s.id));pg16Partial=false}const onDay=state.sessions.filter(s=>pg16LocalDay(s.date)===pg16Day),chosen=pg16Selected();return `<section class="card"><h2>📤 記録を送る</h2><p class="muted">日付を選ぶと、その日の記録がすべて選択されます。LINEでまとめて送れます。</p>${days.length?`<label>プレー日</label><select onchange="pg16SetDay(this.value)">${days.map(d=>`<option value="${d}" ${pg16Day===d?'selected':''}>${d}（${state.sessions.filter(s=>pg16LocalDay(s.date)===d).length}件）</option>`).join('')}</select><label class="pg16choice"><input type="checkbox" ${pg16Partial?'checked':''} onchange="pg16TogglePart(this.checked)">一部の記録だけ選ぶ</label>${pg16Partial?onDay.map(s=>`<label class="pg16choice"><input type="checkbox" ${pg16Selection.has(s.id)?'checked':''} onchange="pg16Toggle('${esc(s.id)}',this.checked)"><span>${esc(s.rounds.map(r=>r.sectionName).join(' / '))}<small class="muted"> ${s.rounds.length*9}H・${esc(s.players.join('、'))}</small></span></label>`).join(''):onDay.map(s=>`<p class="muted">✓ ${esc(s.rounds.map(r=>r.sectionName).join(' / '))}（${s.rounds.length*9}H）</p>`).join('')}<p><strong>${chosen.length}件・${chosen.reduce((n,s)=>n+s.rounds.length*9,0)}ホール</strong>を選択中</p><label>送信方法</label><select id="pg16SendMethod" onchange="pg16Method=this.value"><option value="text" ${pg16Method==='text'?'selected':''}>テキストをコピー（おすすめ）</option><option value="json" ${pg16Method==='json'?'selected':''}>JSONファイルで送る</option><option value="image" ${pg16Method==='image'?'selected':''}>スコアカード画像（閲覧用）</option></select><button style="width:100%;margin-top:12px" ${chosen.length?'':'disabled'} onclick="pg16Export()">${pg16Method==='text'?'共有テキストを作成':pg16Method==='json'?'JSONファイルを共有':'画像を共有'}</button><div id="pg16SendOutput"></div>`:'<p class="muted">まだ送信できるプレー履歴がありません。</p>'}</section>`}
-async function pg16Export(){const sessions=pg16Selected();if(!sessions.length){alert('記録を選択してください');return}const method=document.getElementById('pg16SendMethod')?.value||pg16Method;const name=`parkgolf-share-${pg16Day}`;if(method==='image'){// One combined image for the selected sessions.
+function pg16Send(){
+  const days=pg16Days();
+  if(!days.includes(pg16Day)){
+    pg16Day=days[0]||'';
+    pg16Selection=new Set(state.sessions.filter(s=>pg16LocalDay(s.date)===pg16Day).map(s=>s.id));
+    pg16Partial=false;
+  }
+  const onDay=state.sessions.filter(s=>pg16LocalDay(s.date)===pg16Day),chosen=pg16Selected();
+  return `<section class="card">
+    <h2>📤 記録を送る</h2>
+    <p class="muted">プレー日を選ぶと、その日の記録がすべて選択されます。</p>
+    ${days.length?`
+      <label>プレー日</label>
+      <select onchange="pg16SetDay(this.value)">${days.map(d=>`<option value="${d}" ${pg16Day===d?'selected':''}>${d}（${state.sessions.filter(s=>pg16LocalDay(s.date)===d).length}件）</option>`).join('')}</select>
+      <label class="pg16choice"><input type="checkbox" ${pg16Partial?'checked':''} onchange="pg16TogglePart(this.checked)">一部の記録だけ選ぶ</label>
+      ${pg16Partial?onDay.map(s=>`<label class="pg16choice"><input type="checkbox" ${pg16Selection.has(s.id)?'checked':''} onchange="pg16Toggle('${esc(s.id)}',this.checked)"><span>${esc(s.rounds.map(r=>r.sectionName).join(' / '))}<small class="muted"> ${s.rounds.length*9}H・${esc(s.players.join('、'))}</small></span></label>`).join(''):onDay.map(s=>`<p class="muted">✓ ${esc(s.rounds.map(r=>r.sectionName).join(' / '))}（${s.rounds.length*9}H）</p>`).join('')}
+      <p><strong>${chosen.length}件・${chosen.reduce((n,s)=>n+s.rounds.length*9,0)}ホール</strong>を選択中</p>
+      <div class="pg16sendbox">
+        <h3>🖼️ スコアカード画像で送る</h3>
+        <p class="muted">相手にスコアを見てもらうための画像です。アプリへの記録取り込みには使えません。</p>
+        <button style="width:100%" ${chosen.length?'':'disabled'} onclick="pg16Export('image')">スコアカード画像を共有</button>
+      </div>
+      <div class="pg16sendbox">
+        <h3>📦 記録データで送る</h3>
+        <p class="muted">相手のアプリにプレー記録を取り込んでもらうためのデータです。</p>
+        <label>送信方法</label>
+        <select id="pg16SendMethod" onchange="pg16Method=this.value">
+          <option value="text" ${pg16Method==='text'?'selected':''}>テキストをコピー（おすすめ）</option>
+          <option value="json" ${pg16Method==='json'?'selected':''}>JSONファイルで送る</option>
+        </select>
+        <button style="width:100%;margin-top:12px" ${chosen.length?'':'disabled'} onclick="pg16Export()">${pg16Method==='json'?'JSONファイルを共有':'共有テキストを作成'}</button>
+        <div id="pg16SendOutput"></div>
+      </div>
+    `:'<p class="muted">まだ送信できるプレー履歴がありません。</p>'}
+  </section>`;
+}
+async function pg16Export(requestedMethod){const sessions=pg16Selected();if(!sessions.length){alert('記録を選択してください');return}const method=requestedMethod||document.getElementById('pg16SendMethod')?.value||pg16Method;const name=`parkgolf-share-${pg16Day}`;if(method==='image'){// One combined image for the selected sessions.
 const cards=sessions.map(pgDrawCard),width=Math.max(...cards.map(c=>c.width)),height=cards.reduce((n,c)=>n+c.height,0);if(height>16000){alert('画像が大きすぎます。送る記録を減らしてください。');return}const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');let y=0;for(const card of cards){ctx.drawImage(card,0,y);y+=card.height}canvas.toBlob(blob=>{if(blob)pgSendFile(new File([blob],name+'.png',{type:'image/png'}));else alert('画像を作成できませんでした')},'image/png');return}const payload=pg16Bundle(sessions),raw=JSON.stringify(payload);if(method==='json'){pgSendFile(new File([JSON.stringify(payload,null,2)],name+'.json',{type:'application/json'}));return}const output=document.getElementById('pg16SendOutput');output.innerHTML=`<p class="muted">下のテキストをLINEに貼り付けて送ってください。相手は「記録を受け取る」で貼り付けます。</p><textarea class="pg16copy" id="pg16ShareText" readonly></textarea><button class="secondary" style="width:100%;margin-top:8px" onclick="pg16CopyText()">もう一度コピーする</button><p class="muted" id="pg16CopyInfo"></p>`;document.getElementById('pg16ShareText').value=raw;await pg16CopyText()}
 async function pg16CopyText(){const area=document.getElementById('pg16ShareText');if(!area)return;area.focus();area.select();try{if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');await navigator.clipboard.writeText(area.value);document.getElementById('pg16CopyInfo').textContent='コピーしました。LINEに貼り付けてください。'}catch{document.getElementById('pg16CopyInfo').textContent='自動コピーできない場合は、文字列を長押しして「すべて選択」→「コピー」してください。'}}
 function pg16Receive(){if(pg16Pending)return pg16Preview();return `<section class="card"><h2>📥 記録を受け取る</h2><p class="muted">LINEで受け取ったテキストを貼り付けるだけで、記録を追加できます。既存の履歴は消えません。</p><label>受け取り方法</label><select id="pg16ReceiveMode" onchange="pg16ImportMode=this.value;render()"><option value="text" ${pg16ImportMode==='text'?'selected':''}>テキストを貼り付ける（おすすめ）</option><option value="file" ${pg16ImportMode==='file'?'selected':''}>JSONファイルを選ぶ</option></select>${pg16ImportMode==='text'?'<label>共有テキスト</label><textarea class="pg16copy" id="pg16ReceiveText" placeholder="LINEでコピーした共有データを貼り付けてください"></textarea>':'<label>共有JSONファイル</label><input type="file" id="pg16ReceiveFile" accept=".json,application/json">'}<button style="width:100%;margin-top:12px" onclick="pg16Read()">内容を確認する</button></section>`}
