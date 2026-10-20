@@ -13,7 +13,18 @@ const pg16OldCourses=courses,pg16OldHistory=pgHistory,pg16OldHistoryDetail=histo
 courses=function(){return pg16OldCourses().replace('コースマスター','コースの登録・編集')};
 // The record tab has analysis subtabs; sharing is only in Data Management.
 let pg16RecordView='history',pg16DataView='send',pg16Day='',pg16Selection=new Set(),pg16Partial=false,pg16Method='text',pg16Pending=null,pg16ImportMode='text';
-function pg16Record(){if(historyId)pg16RecordView='history';const modes=[['history','プレー履歴'],['analysis','成績分析'],['profile','マイ成績'],['duel','直接対決'],['ranking','ランキング']];let content=pg16RecordView==='history'?pg16OldHistory():pg16RecordView==='analysis'?pgAnalysis():pg16RecordView==='profile'?pg14Profile():pg16RecordView==='duel'?pg14Duel():ranking();return `<section class="card"><h2>記録</h2><div class="pg16sub">${modes.map(([id,label])=>`<button class="${pg16RecordView===id?'':'secondary'}" onclick="pg16RecordView='${id}';historyId=null;render()">${label}</button>`).join('')}</div></section>`+content}
+// Ver.1.6 minor: show course facility names in the play-history list.
+function pg16HistoryWithPlaces(){
+  if(historyId)return pg16OldHistory();
+  const facilityNames=session=>[...new Set((session.rounds||[]).map(r=>String(r.courseName||'').trim()).filter(Boolean))];
+  return `<section class="card"><h2>プレー履歴</h2><p class="muted">終了したプレーの記録を表示します。</p></section>`+
+    (state.sessions.length?state.sessions.map(s=>{
+      const facilities=facilityNames(s);
+      const facilityLine=facilities.length?facilities.map(n=>esc(n)).join(' / '):'パークゴルフ場名未登録';
+      return `<section class="card"><div class="row"><div style="min-width:0;flex:1"><strong>${fmt(s.date)}</strong><p style="margin:6px 0;font-weight:600;overflow-wrap:anywhere">📍 ${facilityLine}</p><p class="muted">${esc(s.players.join('・'))} / ${s.rounds.length*9}ホール</p></div><button class="secondary" onclick="historyId='${s.id}';render()">詳細</button></div><div class="row">${s.players.map((p,i)=>`<span class="tag">${esc(p)}：${sum(s.rounds.flatMap(r=>r.scores.map(row=>row[i])))}打</span>`).join('')}</div></section>`;
+    }).join(''):'<section class="card"><p class="muted">まだ履歴はありません。</p></section>');
+}
+function pg16Record(){if(historyId)pg16RecordView='history';const modes=[['history','プレー履歴'],['analysis','成績分析'],['profile','マイ成績'],['duel','直接対決'],['ranking','ランキング']];let content=pg16RecordView==='history'?pg16HistoryWithPlaces():pg16RecordView==='analysis'?pgAnalysis():pg16RecordView==='profile'?pg14Profile():pg16RecordView==='duel'?pg14Duel():ranking();return `<section class="card"><h2>記録</h2><div class="pg16sub">${modes.map(([id,label])=>`<button class="${pg16RecordView===id?'':'secondary'}" onclick="pg16RecordView='${id}';historyId=null;render()">${label}</button>`).join('')}</div></section>`+content}
 // Retain date editing and achievements but remove all outgoing/incoming controls from history.
 historyDetail=function(s){let html=pg16OldHistoryDetail(s);html=html.replace(/<section class="card"><h3>📤 スコアカードを共有<\/h3>[\s\S]*?<\/section>/,'');html=html.replace(/<button class="secondary" style="width:100%" onclick="copyHistory\('[^']+'\)"[^>]*>結果をテキストでコピー<\/button>/,'');return html};
 // Override the final renderer; old specialty screens are now rendered within the record tab.
