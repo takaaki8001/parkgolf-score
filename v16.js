@@ -17,7 +17,9 @@ let pg16RecordView='history',pg16DataView='send',pg16Day='',pg16Selection=new Se
 function pg16HistoryWithPlaces(){
   if(historyId)return pg16OldHistory();
   const facilityNames=session=>[...new Set((session.rounds||[]).map(r=>String(r.courseName||'').trim()).filter(Boolean))];
-  return `<section class="card"><h2>プレー履歴</h2><p class="muted">終了したプレーの記録を表示します。</p></section>`+
+  const achievements=state.sessions.flatMap(scoreAchievements).filter(x=>x.score===1||x.score-x.par<=-3).slice(0,8);
+  const special=`<section class="card"><h3>✨ 特別な記録</h3>${achievements.length?achievements.map(x=>`<div class="achievement"><strong>${esc(x.label)}！</strong> ${esc(x.name)}<div class="muted">${esc(x.course)} / ${esc(x.section)} ${x.hole}H・PAR${x.par}を${x.score}打</div><button class="secondary small" onclick="historyId='${esc(x.sessionId)}';render()">記録を見る</button></div>`).join(''):'<p class="muted">ホールインワンやアルバトロスの記録がここに並びます。</p>'}</section>`;
+  return `<section class="card"><h2>プレー履歴</h2><p class="muted">終了したプレーの記録を表示します。</p></section>`+special+
     (state.sessions.length?state.sessions.map(s=>{
       const facilities=facilityNames(s);
       const facilityLine=facilities.length?facilities.map(n=>esc(n)).join(' / '):'パークゴルフ場名未登録';
